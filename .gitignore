@@ -1,0 +1,6 @@
+db/**
+node_modules/**
+test/**
+static/**
+secrets.js
+*.bat
