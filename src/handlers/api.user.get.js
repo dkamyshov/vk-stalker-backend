@@ -25,7 +25,6 @@ module.exports = function(mongodb, mongourl) {
                     info: {
                         id: users[0].id,
                         name: users[0].name,
-                        count: recordsInfo[0] ? recordsInfo[0].count : 0,
                         intervals: dailyIntervalBuilder(records)
                     }
                 });
