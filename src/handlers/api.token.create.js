@@ -1,3 +1,8 @@
+const jwt = require('../helpers/jwt.js');
+const jprequest = require('../helpers/jprequest.js');
+const buildURI = require("../helpers/uri.js");
+const { jwt_secret } = require("../secrets.js");
+
 module.exports = function(mongodb, mongourl, VK) {
     return function(req, res) {
         let owner_id = -1, mdb;
@@ -14,7 +19,6 @@ module.exports = function(mongodb, mongourl, VK) {
         )).then(response => {
             if(response.hasOwnProperty('access_token')) {
                 owner_id = response['user_id'];
-
                 return jprequest(buildURI(
                     VK.friends_get_uri,
                     {
@@ -54,7 +58,7 @@ module.exports = function(mongodb, mongourl, VK) {
                 status: true,
                 token: jwt.create({
                     user_id: owner_id,
-                    admin: owner_id == admin_id
+                    admin: owner_id == VK.admin_id
                 }, jwt_secret)
             });
             res.end();

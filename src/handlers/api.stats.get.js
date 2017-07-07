@@ -1,3 +1,5 @@
+const hide = str => '*'.repeat(3) + String(str).substring(3);
+
 module.exports = function(mongodb, mongourl) {
     return function(req, res) {
         let mdb;
@@ -28,7 +30,9 @@ module.exports = function(mongodb, mongourl) {
                 status: 'ok',
                 recordsCount,
                 usersCount: usersCount.length,
-                accounts,
+                accounts: accounts.map(account => Object.assign(account, {
+                    id: hide(account.id)
+                })),
                 log
             });
             res.end();
