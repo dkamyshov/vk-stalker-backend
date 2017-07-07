@@ -24,7 +24,8 @@ module.exports = function(mongodb, mongourl) {
             });
         }).then(() => {
             _db.close();
-        }).catch(() => {
+        }).catch((e) => {
+            console.log('logger error', e.message);
             _db.close();
         });
 

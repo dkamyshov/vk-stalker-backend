@@ -1,4 +1,4 @@
-const { vk_secret, listen_address } = require("./secrets.js");
+const { vk_secret, listen_address, listen_port } = require("./secrets.js");
 
 const VK = {
     admin_id: 21768456,
@@ -6,7 +6,8 @@ const VK = {
     secret_key: vk_secret,
     api_version: '5.56',
 
-    redirect_uri: 'http://37.98.162.168:9000/verify',
+    redirect_uri: `http://${listen_address}:${listen_port}/verify`,
+    
     auth_uri: 'https://oauth.vk.com/authorize',
     access_token_uri: 'https://oauth.vk.com/access_token',
     friends_get_uri: 'https://api.vk.com/method/friends.get',
@@ -57,6 +58,13 @@ app.post(
     logger,
     rejectUnauthorized,
     require('./handlers/api.dashboard.get.js')(mongodb, mongourl)
+);
+
+app.post(
+    '/api/users.get',
+    logger,
+    rejectUnauthorized,
+    require('./handlers/api.users.get')(mongodb, mongourl)
 );
 
 app.post(
@@ -115,18 +123,29 @@ setInterval(function() {
     let _db, subtractBalance = Object.create(null);
 
     const $query = [
-        { $match: { $and: [ {pause: false }, { balance: { $gt: 0 } } ] } }
+        { $match: { $and: [ { pause: false }, { balance: { $gt: 0 } } ] } },
+        { $lookup : {
+            from: 'users',
+            localField: 'id',
+            foreignField: 'owner',
+            as: 'users'
+        } },
+        { $unwind: '$users' },
+        { $group: {
+            _id: '$users.id',
+            owners: { $push: '$id' }
+        } }
     ];
 
     mongodb.connect(mongourl)
     .then(db => (_db = db).collection('settings').aggregate($query).toArray())
     .then(list => {
-        let uids = Object.create(null), batches = [];
+        let batches = [];
 
         list.map((user, i) => {
-            const bucket = Math.floor(i/250);
-
-            batches[bucket] = Object.assign(batches[bucket] || {}, { [user._id]: user.owners });
+            const bucketId = Math.floor(i/250);
+            
+            batches[bucketId] = Object.assign(batches[bucketId] || {}, { [user._id]: user.owners });
         });
 
         return Promise.all(
@@ -145,7 +164,7 @@ setInterval(function() {
                             _db.collection('records').insertMany(
                                 response.response.map(user => {
                                     batch[user.id].map(owner => {
-                                        subtractBalance[owner] += 1;
+                                        subtractBalance[owner] = (subtractBalance[owner] || 0) + 1;
                                     })
 
                                     return {
@@ -168,13 +187,15 @@ setInterval(function() {
         );
     })
     .then(results => {
-        console.log("Done all batches!");
         _db.close();
     })
     .catch(e => {
         console.error(e);
         _db.close();
+    })
+    .then(() => {
+        updateBalances(subtractBalance);
     });
 }, 60000);
 
-app.listen(9000, listen_address);
+app.listen(listen_port, listen_address);
