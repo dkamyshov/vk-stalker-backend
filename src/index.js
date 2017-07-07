@@ -1,4 +1,4 @@
-const { vk_secret, listen_address } = require("./secrets.js");
+const { vk_secret, listen_address, listen_port } = require("./secrets.js");
 
 const VK = {
     admin_id: 21768456,
@@ -6,7 +6,8 @@ const VK = {
     secret_key: vk_secret,
     api_version: '5.56',
 
-    redirect_uri: 'http://37.98.162.168:9000/verify',
+    redirect_uri: `http://${listen_address}:${listen_port}/verify`,
+    
     auth_uri: 'https://oauth.vk.com/authorize',
     access_token_uri: 'https://oauth.vk.com/access_token',
     friends_get_uri: 'https://api.vk.com/method/friends.get',
@@ -177,4 +178,4 @@ setInterval(function() {
     });
 }, 60000);
 
-app.listen(9000, listen_address);
+app.listen(listen_port, listen_address);

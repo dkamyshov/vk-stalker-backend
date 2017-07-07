@@ -4,3 +4,4 @@ test/**
 static/**
 secrets.js
 *.bat
+.vscode/**
