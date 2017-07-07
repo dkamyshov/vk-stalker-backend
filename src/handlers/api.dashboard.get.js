@@ -29,7 +29,8 @@ const fetchRecords = (db, intervalStart, intervalEnd) => {
             db().collection('records').aggregate([
                 { $match: { $and: [
                     { id: { $in: users.map(user => user.id) } },
-                    { t: { $gte: intervalStart - 60000 } }
+                    { t: { $gte: intervalStart - 60000 } },
+                    { t: { $lt: intervalEnd } }
                 ] } },
                 { $sort: { t: 1 } },
                 { $project: { _id: 0, t: 1, s: 1, id: 1 } }
