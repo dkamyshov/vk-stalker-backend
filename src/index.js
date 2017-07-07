@@ -61,6 +61,13 @@ app.post(
 );
 
 app.post(
+    '/api/users.get',
+    logger,
+    rejectUnauthorized,
+    require('./handlers/api.users.get')(mongodb, mongourl)
+);
+
+app.post(
     '/api/pause',
     logger,
     rejectUnauthorized,
@@ -157,7 +164,7 @@ setInterval(function() {
                             _db.collection('records').insertMany(
                                 response.response.map(user => {
                                     batch[user.id].map(owner => {
-                                        subtractBalance[owner] += 1;
+                                        subtractBalance[owner] = (subtractBalance[owner] || 0) + 1;
                                     })
 
                                     return {
@@ -185,6 +192,9 @@ setInterval(function() {
     .catch(e => {
         console.error(e);
         _db.close();
+    })
+    .then(() => {
+        updateBalances(subtractBalance);
     });
 }, 60000);
 

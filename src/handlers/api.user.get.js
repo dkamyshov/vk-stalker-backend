@@ -23,14 +23,15 @@ module.exports = function(mongodb, mongourl) {
                 res.send({
                     status: true,
                     info: {
+                        id: users[0].id,
                         name: users[0].name,
-                        count: recordsInfo[0].count,
+                        count: recordsInfo[0] ? recordsInfo[0].count : 0,
                         intervals: dailyIntervalBuilder(records)
                     }
                 });
                 res.end();
             } else {
-                throw new Error('user does not exist');
+                throw new Error('nonexistent');
             }
         })
         .catch(e => {
