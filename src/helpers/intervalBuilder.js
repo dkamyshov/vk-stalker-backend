@@ -5,11 +5,7 @@ const intervalBuilder = (records, from, to, intervalLength = 60000, intervalDela
           firstRecord = records[0];
 
     if(records.length == 0) {
-        return {
-            offset: 0, width: 1,
-            status: 3,
-            start: from, end: to,
-        };
+        return [ { offset: 0, width: 1, status: 3, start: from, end: to } ];
     }
 
     let intervals = [{
