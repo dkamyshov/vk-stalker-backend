@@ -116,18 +116,29 @@ setInterval(function() {
     let _db, subtractBalance = Object.create(null);
 
     const $query = [
-        { $match: { $and: [ {pause: false }, { balance: { $gt: 0 } } ] } }
+        { $match: { $and: [ { pause: false }, { balance: { $gt: 0 } } ] } },
+        { $lookup : {
+            from: 'users',
+            localField: 'id',
+            foreignField: 'owner',
+            as: 'users'
+        } },
+        { $unwind: '$users' },
+        { $group: {
+            _id: '$users.id',
+            owners: { $push: '$id' }
+        } }
     ];
 
     mongodb.connect(mongourl)
     .then(db => (_db = db).collection('settings').aggregate($query).toArray())
     .then(list => {
-        let uids = Object.create(null), batches = [];
+        let batches = [];
 
         list.map((user, i) => {
-            const bucket = Math.floor(i/250);
-
-            batches[bucket] = Object.assign(batches[bucket] || {}, { [user._id]: user.owners });
+            const bucketId = Math.floor(i/250);
+            
+            batches[bucketId] = Object.assign(batches[bucketId] || {}, { [user._id]: user.owners });
         });
 
         return Promise.all(
@@ -169,7 +180,6 @@ setInterval(function() {
         );
     })
     .then(results => {
-        console.log("Done all batches!");
         _db.close();
     })
     .catch(e => {
