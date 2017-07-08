@@ -119,17 +119,18 @@ const updateBalances = balances => {
     });
 }
 
-setInterval(function() {
-    let _db, subtractBalance = Object.create(null);
+function updateRecords() {
+    let _db, subtractBalance = Object.create(null), recordsToInsert = [];
 
-    const $query = [
-        { $match: { $and: [ { pause: false }, { balance: { $gt: 0 } } ] } },
-        { $lookup : {
+    let ne = 0, cs = 0, sk = 0;
+
+    const $findUsersQuery = () => [
+        { $match: { $and: [ { balance: { $gt: 0 } }, { pause: false } ] } },
+        { $lookup: {
             from: 'users',
             localField: 'id',
             foreignField: 'owner',
-            as: 'users'
-        } },
+            as: 'users' } },
         { $unwind: '$users' },
         { $group: {
             _id: '$users.id',
@@ -137,15 +138,34 @@ setInterval(function() {
         } }
     ];
 
-    mongodb.connect(mongourl)
-    .then(db => (_db = db).collection('settings').aggregate($query).toArray())
-    .then(list => {
-        let batches = [];
+    const $fetchLastRecordsQuery = uids => [
+        { $match: { id: { $in: uids } } },
+        { $sort: { t: -1 } },
+        { $group: {
+            _id: '$id',
+            t: { $first: '$t' },
+            s: { $first: '$s' }
+        } }
+    ];
 
-        list.map((user, i) => {
-            const bucketId = Math.floor(i/250);
-            
-            batches[bucketId] = Object.assign(batches[bucketId] || {}, { [user._id]: user.owners });
+    mongodb.connect(mongourl)
+    .then(db => (_db = db).collection('settings').aggregate($findUsersQuery()).toArray())
+    .then(users => Promise.all([
+        Promise.resolve(users),
+        _db.collection('records').aggregate($fetchLastRecordsQuery(users.map(user => parseInt(user._id)))).toArray()
+    ]))
+    .then(([users, lastRecords]) => {
+        let batches = [];
+        
+        users.map((user, i) => {
+            const bucketId = Math.floor(i / 250);
+
+            batches[bucketId] = Object.assign(batches[bucketId] || {}, {
+                [user._id]: {
+                    owners: user.owners,
+                    lastRecord: lastRecords.find(record => record._id == parseInt(user._id))
+                }
+            });
         });
 
         return Promise.all(
@@ -161,41 +181,64 @@ setInterval(function() {
                         .then(response => {
                             const now = Date.now();
 
-                            _db.collection('records').insertMany(
-                                response.response.map(user => {
-                                    batch[user.id].map(owner => {
-                                        subtractBalance[owner] = (subtractBalance[owner] || 0) + 1;
-                                    })
+                            response.response.map(user => {
+                                const status = user.online_mobile ? 2 : user.online;
+                                const user_id = parseInt(user.id);
+                                const lastRecord = batch[user_id].lastRecord;
 
-                                    return {
-                                        id: user.id,
-                                        t: now,
-                                        s: user.online_mobile ? 2 : user.online
-                                    };
-                                })
-                            )
-                            .then(() => {
-                                resolve();
+                                batch[user_id].owners.map(owner => {
+                                    subtractBalance[owner] = (subtractBalance[owner] || 0) + 1;
+                                });
+
+                                if(!lastRecord) {
+                                    ne++;
+                                    recordsToInsert.push({
+                                        id: user_id,
+                                        t: now, s: status
+                                    });
+                                } else {
+                                    if(lastRecord.t + 30*60000 < now || lastRecord.s != status) {
+                                        cs++;
+                                        recordsToInsert.push({
+                                            id: user_id,
+                                            t: now, s: status
+                                        });
+                                    } else {
+                                        sk++;
+                                    }
+                                }
                             })
-                            .catch(() => {
-                                reject();
-                            })
+                        })
+                        .then(() => {
+                            resolve();
+                        })
+                        .catch(() => {
+                            reject();
                         })
                     }, i*500);
                 });
             })
         );
-    })
-    .then(results => {
-        _db.close();
+    }).then(() => {
+        console.log(`Non-existent: ${ne}, skip: ${sk}, updates: ${cs}`);
+
+        if(recordsToInsert.length > 0) {
+            return _db.collection('records').insertMany(recordsToInsert);
+        } else {
+            return Promise.resolve();
+        }
     })
     .catch(e => {
         console.error(e);
-        _db.close();
     })
     .then(() => {
+        _db.close();
         updateBalances(subtractBalance);
     });
-}, 60000);
+}
+
+setInterval(updateRecords, 60000);
+
+updateRecords();
 
 app.listen(listen_port, listen_address);

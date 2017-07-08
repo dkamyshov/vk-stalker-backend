@@ -1,6 +1,6 @@
 const fix = n => Math.round(n * 10000) / 10000;
 
-const intervalBuilder = (_records, from, to, intervalLength = 60000, intervalDelay = 120000) => {
+const intervalBuilder = (_records, from, to, intervalLength = 30*60000, intervalDelay = 31*60000) => {
     const total = to-from,
           records = _records.filter(record => record.t >= from - intervalLength && record.t < to),
           firstRecord = records[0];
