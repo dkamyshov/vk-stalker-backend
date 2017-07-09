@@ -99,8 +99,8 @@ app.post(
 
         for(let i = 0; i < 24; ++i) {
             intervals.push({
-                start: base.getTime() + i*hour,
-                end: base.getTime() + (i+1)*hour
+                start: new Date(base.getTime() + i*hour),
+                end:  new Date(base.getTime() + (i+1)*hour)
             });
         }
 
@@ -141,8 +141,7 @@ app.post(
                                             intervals: intervalBuilder(
                                                 lastRecords.concat(records),
                                                 iv.start,
-                                                iv.end,
-                                                iv.end >= Date.now()
+                                                iv.end
                                             )
                                         });
 
@@ -162,7 +161,7 @@ app.post(
         .then(([user, hours]) => {
             res.send({
                 status: true,
-                rows: hours.sort((a, b) => b.offset-a.offset)
+                rows: hours.sort((a, b) => b.offset.getTime()-a.offset.getTime())
             });
             res.end();
         })
@@ -281,7 +280,7 @@ function updateRecords() {
                               v: VK.api_version }
                         ))
                         .then(response => {
-                            const now = Date.now();
+                            const now = new Date();
 
                             response.response.map(user => {
                                 const status = user.online_mobile ? 2 : user.online;

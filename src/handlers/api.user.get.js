@@ -12,8 +12,8 @@ module.exports = function(mongodb, mongourl) {
 
         for(let i = 0; i < 7; ++i) {
             intervals.push({
-                start: base.getTime() - i*day,
-                end: base.getTime() - (i-1)*day
+                start: new Date(base.getTime() - i*day),
+                end: new Date(base.getTime() - (i-1)*day)
             });
         }
 

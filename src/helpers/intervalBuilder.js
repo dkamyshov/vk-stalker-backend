@@ -34,7 +34,7 @@ const intervalBuilder = (records, from, to) => {
     const lastRecord = records.pop();
     let lastInterval = intervals[intervals.length-1];
     
-    lastInterval.end = Math.min(to, Date.now());
+    lastInterval.end = new Date(Math.min(to.getTime(), Date.now()));
     lastInterval.width = fix((lastInterval.end - lastInterval.start) / total);
 
     return intervals;

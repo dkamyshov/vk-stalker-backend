@@ -76,8 +76,8 @@ module.exports = function(mongodb, mongourl) {
 
         const getDb = () => _db;
 
-        const intervalEnd = Date.now();
-        const intervalStart = intervalEnd - 60000*60*3;
+        const intervalEnd = new Date();
+        const intervalStart = new Date(intervalEnd.getTime() - 60000*60*3);
 
         mongodb.connect(mongourl)
         .then(db => (_db = db).collection('settings').find({id: req.jwt.payload.user_id}).toArray())
