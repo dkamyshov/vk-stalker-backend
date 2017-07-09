@@ -8,7 +8,7 @@ const intervalBuilder = (records, from, to) => {
         return [ { offset: 0, width: 1, status: 3, start: from, end: to } ];
     }
 
-    let intervals = [{
+    const intervals = [{
         offset: 0,
         status: firstRecord.t > from ? 3 : firstRecord.s,
         start: from,
@@ -32,7 +32,7 @@ const intervalBuilder = (records, from, to) => {
     }
 
     const lastRecord = records.pop();
-    let lastInterval = intervals[intervals.length-1];
+    const lastInterval = intervals[intervals.length-1];
     
     lastInterval.end = new Date(Math.min(to.getTime(), Date.now()));
     lastInterval.width = fix((lastInterval.end - lastInterval.start) / total);
