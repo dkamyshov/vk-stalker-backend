@@ -5,12 +5,12 @@ const intervalBuilder = (records, from, to) => {
           firstRecord = records[0];
 
     if(records.length == 0) {
-        return [ { offset: 0, width: 1, status: 3, start: from, end: to } ];
+        return [ { offset: 0, width: 1, status: 99, start: from, end: to } ];
     }
 
     const intervals = [{
         offset: 0,
-        status: firstRecord.t > from ? 3 : firstRecord.s,
+        status: firstRecord.t > from ? 99 : firstRecord.s,
         start: from,
     }], noFirst = firstRecord.t > from;
 

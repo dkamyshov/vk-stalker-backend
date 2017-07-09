@@ -135,14 +135,14 @@ function queryVK(batches, subtractBalance, recordsToInsert) {
                     jprequest(buildURI(
                         VK.users_get_uri,
                         { user_ids: Object.keys(batch).join(','),
-                            fields: 'online',
+                            fields: 'online,last_seen',
                             v: VK.api_version }
                     ))
                     .then(response => {
                         const now = new Date();
 
                         response.response.map(user => {
-                            const status = user.online_mobile ? 2 : user.online;
+                            const status = user.online ? user.last_seen.platform : 0;
                             const user_id = parseInt(user.id);
                             const lastRecord = batch[user_id].lastRecord;
 
