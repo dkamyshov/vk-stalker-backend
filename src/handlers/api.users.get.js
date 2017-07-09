@@ -29,18 +29,33 @@ const fetchRecords = (db, intervalStart, intervalEnd) => {
             db().collection('records').aggregate([
                 { $match: { $and: [
                     { id: { $in: users.map(user => user.id) } },
-                    { t: { $gte: intervalStart - 60000 } },
+                    { t: { $gte: intervalStart } },
                     { t: { $lt: intervalEnd } }
                 ] } },
                 { $sort: { t: 1 } },
                 { $project: { _id: 0, t: 1, s: 1, id: 1 } }
+            ]).toArray(),
+            db().collection('records').aggregate([
+                { $match: { $and: [
+                    { id: { $in: users.map(user => user.id) } },
+                    { t: { $lt: intervalStart } }
+                ] } },
+                { $sort: { t: -1 } },
+                { $group: {
+                    _id: '$id',
+                    id: { $first: '$id' },
+                    t: { $first: '$t' },
+                    s: { $first: '$s' }
+                } }
             ]).toArray()
         ]);
     };
 };
 
 const buildIntervalsAndSend = (res, intervalStart, intervalEnd) => {
-    return function([account, users, records]) {
+    return function([account, users, records, lastRecords]) {
+        records = lastRecords.concat(records);
+
         res.send({
             status: true,
             users: users.map(user => Object.assign(user, {

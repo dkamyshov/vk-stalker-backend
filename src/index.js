@@ -23,6 +23,7 @@ let mongodb = require('mongodb').MongoClient;
 const jwt = require("./helpers/jwt.js");
 const buildURI = require("./helpers/uri.js");
 const jprequest = require('./helpers/jprequest.js');
+const intervalBuilder = require('./helpers/intervalBuilder.js');
 
 const mongourl = "mongodb://localhost:27017/vkwatcher";
 
@@ -80,6 +81,107 @@ app.post(
     rejectUnauthorized,
     require('./handlers/api.user.get.js')(mongodb, mongourl)
 );
+
+app.post(
+    '/api/user.hourly.get',
+    logger,
+    rejectUnauthorized,
+    function(req, res) {
+        let _db;
+
+        const offset = new Date(parseInt(req.body.offset));
+
+        const hour = 3600*1000;
+        const nowDate = new Date();
+        const base = new Date(offset.getFullYear(), offset.getMonth(), offset.getDate());
+
+        let intervals = [];
+
+        for(let i = 0; i < 24; ++i) {
+            intervals.push({
+                start: base.getTime() + i*hour,
+                end: base.getTime() + (i+1)*hour
+            });
+        }
+
+        mongodb.connect(mongourl)
+        .then(db => (_db = db).collection('users').find({ id: parseInt(req.body.userId) }).toArray())
+        .then(users => {
+            if(users.length > 0) {
+                return Promise.all([
+                    Promise.resolve(users[0]),
+                    new Promise(function(resolve, reject) {
+                        let hours = [];
+
+                        Promise.all(
+                            intervals.map((iv, i) => new Promise(function(resolve, reject) {
+                                _db.collection('records').aggregate([
+                                    { $match: { $and: [
+                                        { id: users[0].id },
+                                        { t: { $gte: iv.start } },
+                                        { t: { $lt: iv.end } }
+                                    ] } },
+                                    { $sort: { t: 1 } },
+                                    { $project: { _id: 0, t: 1, s: 1, id: 1 } }
+                                ]).toArray().then(records => {
+                                    _db.collection('records').aggregate([
+                                        { $match: { $and: [
+                                            { id: users[0].id },
+                                            { t: { $lt: iv.start } }
+                                        ] } },
+                                        { $sort: { t: -1 } },
+                                        { $group: {
+                                            _id: '$id',
+                                            t: { $first: '$t' },
+                                            s: { $first: '$s' }
+                                        } }
+                                    ]).toArray().then(lastRecords => {
+                                        hours.push({
+                                            offset: iv.start,
+                                            intervals: intervalBuilder(
+                                                lastRecords.concat(records),
+                                                iv.start,
+                                                iv.end,
+                                                iv.end >= Date.now()
+                                            )
+                                        });
+
+                                        resolve();
+                                    })
+                                })
+                            }))
+                        ).then(() => {
+                            resolve(hours);
+                        })
+                    })
+                ]);
+            } else {
+                throw new Error('nonexistent');
+            }
+        })
+        .then(([user, hours]) => {
+            res.send({
+                status: true,
+                rows: hours.sort((a, b) => b.offset-a.offset)
+            });
+            res.end();
+        })
+        .catch(e => {
+            console.error("[ERROR /api/user.get]", e.message);
+
+            if(!res.finished) {
+                res.send({
+                    status: false,
+                    error: e.message
+                });
+                res.end();
+            }
+        })
+        .then(() => {
+            _db.close();
+        });
+    }
+)
 
 app.post(
     '/api/token.create',
@@ -197,7 +299,7 @@ function updateRecords() {
                                         t: now, s: status
                                     });
                                 } else {
-                                    if(lastRecord.t + 30*60000 < now || lastRecord.s != status) {
+                                    if(lastRecord.s != status) {
                                         cs++;
                                         recordsToInsert.push({
                                             id: user_id,

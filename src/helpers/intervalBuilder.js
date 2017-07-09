@@ -1,8 +1,7 @@
 const fix = n => Math.round(n * 10000) / 10000;
 
-const intervalBuilder = (_records, from, to, intervalLength = 30*60000, intervalDelay = 31*60000) => {
+const intervalBuilder = (records, from, to) => {
     const total = to-from,
-          records = _records.filter(record => record.t >= from - intervalLength && record.t < to),
           firstRecord = records[0];
 
     if(records.length == 0) {
@@ -20,27 +19,6 @@ const intervalBuilder = (_records, from, to, intervalLength = 30*60000, interval
 
         let lastInterval = intervals[intervals.length-1];
 
-        if(prevRecord && currentRecord.t > prevRecord.t + intervalDelay) {
-            lastInterval.end = prevRecord.t + intervalLength;
-            lastInterval.width = fix((lastInterval.end - lastInterval.start) / total);
-
-            intervals.push({
-                offset: fix((lastInterval.end - from) / total),
-                status: 3,
-                start: lastInterval.end,
-                end: currentRecord.t,
-                width: fix((currentRecord.t - lastInterval.end) / total),
-            });
-
-            intervals.push({
-                offset: fix((currentRecord.t - from) / total),
-                status: currentRecord.s,
-                start: currentRecord.t,
-            });
-
-            continue;
-        }
-
         if(currentRecord.s != lastInterval.status) {
             lastInterval.end = currentRecord.t;
             lastInterval.width = fix((lastInterval.end - lastInterval.start) / total);
@@ -55,18 +33,9 @@ const intervalBuilder = (_records, from, to, intervalLength = 30*60000, interval
 
     const lastRecord = records.pop();
     let lastInterval = intervals[intervals.length-1];
-    lastInterval.end = to <= lastRecord.t+intervalLength ? to : lastRecord.t+intervalLength;
+    
+    lastInterval.end = Math.min(to, Date.now());
     lastInterval.width = fix((lastInterval.end - lastInterval.start) / total);
-
-    if(to > lastRecord.t+intervalLength) {
-        intervals.push({
-            offset: fix((lastRecord.t + intervalLength - from) / total),
-            status: 3,
-            start: lastRecord.t + intervalLength,
-            end: to,
-            width: fix((to - lastRecord.t - intervalLength) / total),
-        });
-    }
 
     return intervals;
 }
