@@ -22,7 +22,7 @@ module.exports = function(mongodb, mongourl) {
                     { $unwind: '$settings' },
                     { $project: { _id: 0, id: '$_id', users: 1, settings: { balance: 1, pause: 1 } } }
                 ]).toArray(),
-                db.collection('journal').find({}).sort({ time: -1}).limit(180).toArray()
+                db.collection('access').find({}).sort({ time: -1 }).limit(500).toArray()
             ]);
         })
         .then(([recordsCount, usersCount, accounts, log]) => {
