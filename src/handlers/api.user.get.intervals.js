@@ -29,7 +29,7 @@ module.exports = function(mongodb, mongourl, icount, ilength, bo) {
         }
 
         mongodb.connect(mongourl)
-        .then(db => (_db = db).collection('users').find({ id: parseInt(req.body.userId) }).toArray())
+        .then(db => (_db = db).collection('users').find({ id: parseInt(req.body.userId), owner: req.jwt.payload.user_id }).toArray())
         .then(users => {
             if(users.length > 0) {
                 const user = users[0];
