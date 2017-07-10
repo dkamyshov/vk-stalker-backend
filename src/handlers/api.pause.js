@@ -1,33 +1,27 @@
-module.exports = function(mongodb, mongourl) {
-    return function(req, res) {
-        let _db;
+const sendAndClose = require('../helpers/sendAndClose.js');
 
-        mongodb.connect(mongourl)
-        .then(db => {
-            return (_db = db).collection('settings').update({id: req.jwt.payload.user_id}, {
-                $set: { pause: req.body.pause }
+module.exports = function(mongodb, mongourl) {
+    return async function(req, res) {
+        let connection;
+
+        try {
+            connection = await mongodb.connect(mongourl);
+
+            await connection.collection('settings').update({ id: req.jwt.payload.user_id }, {
+                $set: { pause: req.body.paused }
             });
-        })
-        .then(() => {
-            res.send({
+
+            sendAndClose(res, connection, {
                 status: true,
-                paused: req.body.pause
+                paused: req.body.paused
             });
-            res.end();
-        })
-        .catch(e => {
+        } catch(e) {
             console.error("[ERROR /api/pause]", e.message);
 
-            if(!res.finished) {
-                res.send({
-                    status: false,
-                    error: e.message
-                });
-                res.end();
-            }
-        })
-        .then(() => {
-            _db.close();
-        });
+            sendAndClose(res, connection, {
+                status: false,
+                error: e.message
+            });
+        }
     };
 };

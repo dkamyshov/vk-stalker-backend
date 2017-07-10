@@ -1,90 +1,70 @@
 const intervalBuilder = require('../helpers/intervalBuilder.js');
 const { $intervalQuery, $lastRecordsQuery } = require('../helpers/queries.js');
-
-const sendData = (res) => ([user, ints]) => {
-    res.send({
-        status: true,
-        info: {
-            id: user.id,
-            name: user.name,
-            intervals: ints.sort((a, b) => b.offset.getTime()-a.offset.getTime())
-        }
-    });
-
-    res.end();
-};
+const sendAndClose = require('../helpers/sendAndClose.js');
 
 module.exports = function(mongodb, mongourl, icount, ilength, bo) {
-    return function(req, res) {
-        let _db, intervals = [];
+    return async function(req, res) {
+        let connection;
 
         const offset = req.body.offset ? new Date(parseInt(req.body.offset)) : new Date();
         const base = new Date(new Date(offset.getFullYear(), offset.getMonth(), offset.getDate()).getTime()-bo);
 
-        for(let i = 0; i < icount; ++i) {
-            intervals.push({
-                start: new Date(base.getTime() + i*ilength),
-                end:  new Date(base.getTime() + (i+1)*ilength)
-            });
-        }
+        const timeIntervals = Array.from({ length: icount }, (v, i) => ({
+            start: new Date(base.getTime() + i*ilength),
+            end:  new Date(base.getTime() + (i+1)*ilength)
+        }));
 
-        mongodb.connect(mongourl)
-        .then(db => (_db = db).collection('users').find({ id: parseInt(req.body.userId), owner: req.jwt.payload.user_id }).toArray())
-        .then(users => {
+        try {
+            connection = await mongodb.connect(mongourl);
+
+            const colUsers = connection.collection('users'),
+                  colRecords = connection.collection('records');
+
+            const users = await colUsers.find({ id: parseInt(req.body.userId), owner: req.jwt.payload.user_id }).toArray();
+
             if(users.length > 0) {
-                const user = users[0];
+                const {id, name} = users[0];
 
-                return Promise.all([
-                    Promise.resolve(user),
-                    new Promise(function(resolve, reject) {
-                        let ints = [];
-                        Promise.all(
-                            intervals.map(iv => new Promise(async function(resolve, reject) {
-                                const records = await _db
-                                                      .collection('records')
-                                                      .aggregate($intervalQuery(user.id, iv.start, iv.end))
-                                                      .toArray();
-
-                                const lastRecords = await _db
-                                                          .collection('records')
-                                                          .aggregate($lastRecordsQuery(user.id, iv.start))
-                                                          .toArray();
-
-                                ints.push({
-                                    offset: iv.start,
-                                    intervals: intervalBuilder(
-                                        lastRecords.concat(records),
-                                        iv.start,
-                                        iv.end
-                                    )
-                                });
-
-                                resolve();
-                            }))
-                        )
-                        .then(() => {
-                            resolve(ints);
-                        });
-                    })
+                const [records, lastRecords] = await Promise.all([
+                    Promise.all(
+                        timeIntervals.map(({start, end}) => (
+                            colRecords.aggregate($intervalQuery(id, start, end)).toArray()
+                        ))
+                    ),
+                    Promise.all(
+                        timeIntervals.map(({start, end}) => (
+                            colRecords.aggregate($lastRecordsQuery(id, start)).toArray()
+                        ))
+                    )
                 ]);
+
+                const intervals = timeIntervals.map(({start, end}, i) => ({
+                    offset: start,
+                    intervals: intervalBuilder(
+                        lastRecords[i].concat(records[i]),
+                        start,
+                        end
+                    )
+                })).sort((b, a) => a.offset - b.offset);
+
+                sendAndClose(res, connection, {
+                    status: true,
+                    info: {
+                        id,
+                        name,
+                        intervals
+                    }
+                });
             } else {
                 throw new Error('nonexistent');
             }
-        })
-        .then(sendData(res))
-        .catch(e => {
-            console.error("[ERROR /api/user.get]", e.message);
+        } catch(e) {
+            console.error("[ERROR /api/user.intervals.get]", e.message);
 
-            if(!res.finished) {
-                res.send({
-                    status: false,
-                    error: e.message
-                });
-                res.end();
-            }
-        })
-        .then(() => {
-            _db.close();
-        });
+            sendAndClose(res, connection, {
+                status: false,
+                error: e.message
+            })
+        }
     };
 };

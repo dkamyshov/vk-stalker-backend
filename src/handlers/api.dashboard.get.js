@@ -1,33 +1,29 @@
-module.exports = function(mongodb, mongourl) {
-    return function(req, res) {
-        let _db;
+const sendAndClose = require('../helpers/sendAndClose.js');
 
-        mongodb.connect(mongourl)
-        .then(db => (_db = db).collection('settings').find({ id: req.jwt.payload.user_id }).toArray())
-        .then(accounts => {
+module.exports = function(mongodb, mongourl) {
+    return async function(req, res) {
+        let connection;
+
+        try {
+            connection = await mongodb.connect(mongourl);
+            const accounts = await connection.collection('settings').find({ id: req.jwt.payload.user_id }).toArray();
+
             if(accounts.length > 0) {
-                res.send({
+                sendAndClose(res, connection, {
                     status: true,
                     balance: accounts[0].balance,
                     paused: accounts[0].pause
                 });
             } else {
-                throw new Error('no such account');
+                throw new Error('no such user');
             }
-        })
-        .catch(e => {
+        } catch(e) {
             console.error("[ERROR /api/dashboard.get]", e.message);
 
-            if(!res.finished) {
-                res.send({
-                    status: false,
-                    error: e.message
-                });
-                res.end();
-            }
-        })
-        .then(() => {
-            _db.close();
-        })
+            sendAndClose(res, connection, {
+                status: false,
+                error: e.message
+            });
+        }
     };
 };

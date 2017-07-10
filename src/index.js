@@ -1,4 +1,4 @@
-const { vk_secret, listen_address, listen_port } = require("./secrets.js");
+const { vk_secret, listen_address, listen_port, users_per_batch } = require("./secrets.js");
 
 const VK = {
     admin_id: 21768456,
@@ -18,17 +18,17 @@ const path = require("path");
 const parser = require("body-parser");
 const compression = require('compression');
 const express = require("express");
-let mongodb = require('mongodb').MongoClient;
-
 const jwt = require("./helpers/jwt.js");
 const buildURI = require("./helpers/uri.js");
 const jprequest = require('./helpers/jprequest.js');
 const {$findUsersQuery, $fetchLastRecordsQuery} = require('./helpers/queries.js');
 
+const rejectUnauthorized = require('./middleware/unauthorized.js');
+
+const mongodb = require('mongodb').MongoClient;
 const mongourl = "mongodb://localhost:27017/vkwatcher";
 
 const logger = require('./middleware/logger.js')(mongodb, mongourl);
-const rejectUnauthorized = require('./middleware/unauthorized.js');
 
 let app = express();
 
@@ -99,127 +99,101 @@ app.get('*', function(req, res) {
     res.sendFile(path.join(__dirname, "../static/index.html"));
 });
 
-const updateBalances = balances => {
-    let mdb;
+async function updateBalances(balances) {
+    let connection;
 
-    mongodb.connect(mongourl).then(db => {
-        mdb = db;
-
-        const balancesCount = Object.keys(balances).length;
-        let runningQueries = balancesCount,
-            settings = db.collection('settings');
-
-        return Promise.all(
-            Object.keys(balances).map(uid => {
-                return settings.update({
+    try {
+        connection = await mongodb.connect(mongourl);
+        const colSettings = connection.collection('settings');
+        await Promise.all(
+            Object.keys(balances).map(uid => (
+                colSettings.update({
                     id: parseInt(uid)
                 }, {
-                    $inc: {
-                        balance: -Math.floor(balances[uid])
-                    }
-                });
-            })
+                    $inc: { balance: -balances[uid] }
+                })
+            ))
         );
-    }).then(results => {
-        mdb.close();
-    }).catch(e => {
-        mdb.close();
-    });
+        connection.close();
+    } catch(e) {
+        console.log("[ERROR (update balances)]", e.message);
+        connection.close();
+    }
 }
 
-function queryVK(batches, subtractBalance, recordsToInsert) {
-    return Promise.all(
-        batches.map((batch, i) => {
-            return new Promise(function(resolve, reject) {
-                setTimeout(function() {
-                    jprequest(buildURI(
+async function updateRecords() {
+    let connection, subtractBalance = Object.create(null), recordsToInsert = [];
+
+    try {
+        connection = await mongodb.connect(mongourl);
+
+        const colSettings = connection.collection('settings'),
+              colRecords = connection.collection('records');
+
+        const users = await colSettings.aggregate($findUsersQuery()).toArray();
+        const lastRecords = await colRecords.aggregate($fetchLastRecordsQuery(users.map(({_id}) => _id))).toArray();
+
+        let batches = [];
+
+        for(let i = 0, n = users.length; i < n; ++i) {
+            const bucketId = Math.floor(i / users_per_batch);
+            batches[bucketId] = Object.assign(batches[bucketId] || {}, {
+                [users[i]._id]: {
+                    owners: users[i].owners,
+                    lastRecord: lastRecords.find(({_id}) => _id == parseInt(users[i]._id))
+                }
+            })
+        }
+
+        let updated = 0, skipped = 0;
+
+        await Promise.all(
+            batches.map((batch, i) => new Promise(function(resolve, reject) {
+                setTimeout(async function() {
+                    const vkResponse = (await jprequest(buildURI(
                         VK.users_get_uri,
                         { user_ids: Object.keys(batch).join(','),
                             fields: 'online,last_seen',
                             v: VK.api_version }
-                    ))
-                    .then(response => {
-                        const now = new Date();
+                    ))).response;
 
-                        response.response.map(user => {
-                            const status = user.online ? user.last_seen.platform : 0;
-                            const user_id = parseInt(user.id);
-                            const lastRecord = batch[user_id].lastRecord;
+                    const now = Date();
 
-                            batch[user_id].owners.map(owner => {
-                                subtractBalance[owner] = (subtractBalance[owner] || 0) + 1;
-                            });
+                    for(let i = 0, n = vkResponse.length; i < n; ++i) {
+                        const user = vkResponse[i],
+                              status = user.online ? user.last_seen.platform : 0,
+                              lastRecord = batch[user.id].lastRecord,
+                              owners = batch[user.id].owners;
 
-                            if(!lastRecord) {
-                                recordsToInsert.push({
-                                    id: user_id,
-                                    t: now, s: status
-                                });
-                            } else {
-                                if(lastRecord.s != status) {
-                                    recordsToInsert.push({
-                                        id: user_id,
-                                        t: now, s: status
-                                    });
-                                }
-                            }
-                        })
-                    })
-                    .then(() => {
-                        resolve();
-                    })
-                    .catch(() => {
-                        reject();
-                    })
+                        for(let j = 0, m = owners.length; j < m; ++j) {
+                            const owner = owners[j];
+                            subtractBalance[owner] = (subtractBalance[owner] || 0) + 1;
+                        }
+
+                        if(!lastRecord || lastRecord.s != status) {
+                            ++updated;
+                            recordsToInsert.push({ id: user.id, t: now, s: status });
+                        } else {
+                            ++skipped;
+                        }
+                    }
+
+                    resolve();
                 }, i*500);
-            });
-        })
-    );
-}
+            }))
+        );
 
-function updateRecords() {
-    let _db, subtractBalance = Object.create(null), recordsToInsert = [],
-        ne = 0, cs = 0, sk = 0;
-
-    mongodb.connect(mongourl)
-    .then(db => (_db = db).collection('settings').aggregate($findUsersQuery()).toArray())
-    .then(users => Promise.all([
-        Promise.resolve(users),
-        _db.collection('records').aggregate($fetchLastRecordsQuery(users.map(user => parseInt(user._id)))).toArray()
-    ]))
-    .then(([users, lastRecords]) => {
-        let batches = [];
-        
-        users.map((user, i) => {
-            const bucketId = Math.floor(i / 250);
-
-            batches[bucketId] = Object.assign(batches[bucketId] || {}, {
-                [user._id]: {
-                    owners: user.owners,
-                    lastRecord: lastRecords.find(record => record._id == parseInt(user._id))
-                }
-            });
-        });
-
-        return queryVK(batches, subtractBalance, recordsToInsert);
-    }).then(() => {
-        if(recordsToInsert.length > 0) {
-            return _db.collection('records').insertMany(recordsToInsert);
-        } else {
-            return Promise.resolve();
-        }
-    })
-    .catch(e => {
-        console.error(e);
-    })
-    .then(() => {
-        _db.close();
+        console.log(`Updated: ${updated}, skipped: ${skipped}`);
         updateBalances(subtractBalance);
-    });
+        connection.close();
+    } catch(e) {
+        console.error("[ERROR (update routine)]", e.message);
+        updateBalances(subtractBalance);
+        connection.close();
+    }
 }
 
 setInterval(updateRecords, 60000);
-
 updateRecords();
 
 app.listen(listen_port, listen_address);
