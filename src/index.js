@@ -157,7 +157,7 @@ async function updateRecords() {
                             v: VK.api_version }
                     ))).response;
 
-                    const now = Date();
+                    const now = new Date();
 
                     for(let i = 0, n = vkResponse.length; i < n; ++i) {
                         const user = vkResponse[i],
@@ -183,7 +183,9 @@ async function updateRecords() {
             }))
         );
 
-        console.log(`Updated: ${updated}, skipped: ${skipped}`);
+        await colRecords.insertMany(recordsToInsert);
+
+        console.log(`Updated: ${recordsToInsert.length}, skipped: ${skipped}`);
         updateBalances(subtractBalance);
         connection.close();
     } catch(e) {
