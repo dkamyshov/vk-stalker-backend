@@ -12,15 +12,15 @@ Currently the only way to sign up/login is though VK's OAuth system.
 The service provides a brief overview of your friends' activity for the last 3 hours, as well as detailed daily and hourly stats.
 
 <div style='text-align: center;'>
-    <img alt='Overview' src='https://pp.userapi.com/c638928/v638928456/49009/KcZPbGIQ6KI.jpg'/>
+    <img alt='Overview' src='https://pp.userapi.com/c837629/v837629083/57816/FqdcCyqFN_A.jpg'/>
 </div>
 <hr/>
 <div style='text-align: center;'>
-    <img alt='Detailed daily view' src='https://pp.userapi.com/c638928/v638928456/49019/ZAEhbDsWu_s.jpg'/>
+    <img alt='Detailed daily view' src='https://pp.userapi.com/c837629/v837629083/5780d/4BswhvjvrYw.jpg'/>
 </div>
 <hr/>
 <div style='text-align: center;'>
-    <img alt='Detailed hourly view' src='https://pp.userapi.com/c638928/v638928456/49011/FtRq-eMNLz0.jpg'/>
+    <img alt='Detailed hourly view' src='https://pp.userapi.com/c837629/v837629083/57804/LEP1ncdJkjw.jpg'/>
 </div>
 
 ## Contact
