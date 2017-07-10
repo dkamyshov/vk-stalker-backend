@@ -17,7 +17,7 @@ const intervalBuilder = (records, from, to) => {
     for(let i = noFirst ? 0 : 1; i < records.length; ++i) {
         const currentRecord = records[i], prevRecord = records[i-1];
 
-        let lastInterval = intervals[intervals.length-1];
+        const lastInterval = intervals[intervals.length-1];
 
         if(currentRecord.s != lastInterval.status) {
             lastInterval.end = currentRecord.t;
@@ -31,9 +31,7 @@ const intervalBuilder = (records, from, to) => {
         }
     }
 
-    const lastRecord = records.pop();
-    const lastInterval = intervals[intervals.length-1];
-    
+    const lastInterval = intervals[intervals.length-1];    
     lastInterval.end = new Date(Math.min(to.getTime(), Date.now()));
     lastInterval.width = fix((lastInterval.end - lastInterval.start) / total);
 

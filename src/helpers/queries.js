@@ -8,6 +8,16 @@ const $intervalQuery = (uid, start, end) => [
     { $project: { _id: 0, t: 1, s: 1, id: 1 } }
 ];
 
+const $intervalQueryMulti = (uids, start, end) => [
+    { $match: { $and: [
+        { id: { $in: uids } },
+        { t: { $gte: start } },
+        { t: { $lt: end } }
+    ] } },
+    { $sort: { t: 1 } },
+    { $project: { _id: 0, t: 1, s: 1, id: 1 } }
+];
+
 const $lastRecordsQuery = (uid, start) => [
     { $match: { $and: [
         { id: uid },
@@ -16,6 +26,20 @@ const $lastRecordsQuery = (uid, start) => [
     { $sort: { t: -1 } },
     { $group: {
         _id: '$id',
+        t: { $first: '$t' },
+        s: { $first: '$s' }
+    } }
+];
+
+const $lastRecordsQueryMulti = (uids, start) => [
+    { $match: { $and: [
+        { id: { $in: uids } },
+        { t: { $lt: start } }
+    ] } },
+    { $sort: { t: -1 } },
+    { $group: {
+        _id: '$id',
+        id: { $first: '$id' },
         t: { $first: '$t' },
         s: { $first: '$s' }
     } }
@@ -45,9 +69,24 @@ const $fetchLastRecordsQuery = uids => [
     } }
 ];
 
+const $userStats = () => [
+    { $group: { _id: '$owner', users: { $push: '$id' } } },
+    { $lookup: {
+            from: 'settings',
+            localField: '_id',
+            foreignField: 'id',
+            as: 'settings'
+    } },
+    { $unwind: '$settings' },
+    { $project: { _id: 0, id: '$_id', users: 1, settings: { balance: 1, pause: 1 } } }
+];
+
 module.exports = {
     $intervalQuery,
+    $intervalQueryMulti,
     $lastRecordsQuery,
+    $lastRecordsQueryMulti,
     $findUsersQuery,
-    $fetchLastRecordsQuery
+    $fetchLastRecordsQuery,
+    $userStats
 };
