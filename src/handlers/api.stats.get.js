@@ -1,52 +1,38 @@
+const {$userStats} = require('../helpers/queries.js');
+const sendAndClose = require('../helpers/sendAndClose.js');
+
 const hide = str => '*'.repeat(3) + String(str).substring(3);
 
 module.exports = function(mongodb, mongourl) {
-    return function(req, res) {
-        let mdb;
+    return async function(req, res) {
+        let connection;
 
-        mongodb.connect(mongourl)
-        .then(db => {
-            mdb = db;
+        try {
+            connection = await mongodb.connect(mongourl);
 
-            return Promise.all([
-                db.collection('records').count(),
-                db.collection('users').distinct('id'),
-                db.collection('users').aggregate([
-                    { $group: { _id: '$owner', users: { $push: '$id' } } },
-                    { $lookup: {
-                            from: 'settings',
-                            localField: '_id',
-                            foreignField: 'id',
-                            as: 'settings'
-                    } },
-                    { $unwind: '$settings' },
-                    { $project: { _id: 0, id: '$_id', users: 1, settings: { balance: 1, pause: 1 } } }
-                ]).toArray(),
-                db.collection('access').find({}).sort({ time: -1 }).limit(500).toArray()
+            const [recordsCount, users, accounts, log] = await Promise.all([
+                connection.collection('records').count(),
+                connection.collection('users').distinct('id'),
+                connection.collection('users').aggregate($userStats()).toArray(),
+                connection.collection('access').find({}).sort({ time: -1 }).limit(500).toArray()
             ]);
-        })
-        .then(([recordsCount, usersCount, accounts, log]) => {
-            res.send({
-                status: 'ok',
+
+            sendAndClose(res, connection, {
                 recordsCount,
-                usersCount: usersCount.length,
+                log,
+                status: true,
+                usersCount: users.length,
                 accounts: accounts.map(account => Object.assign(account, {
                     id: hide(account.id)
-                })),
-                log
+                }))
             });
-            res.end();
-            mdb.close();
-        })
-        .catch(e => {
+        } catch(e) {
             console.error("[ERROR /api/stats.get]", e.message);
 
-            res.send({
-                status: 'fail',
+            sendAndClose(res, connection, {
+                status: false,
                 error: e.message
             });
-            res.end();
-            mdb.close();
-        });
+        }
     };
 };

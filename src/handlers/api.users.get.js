@@ -1,103 +1,66 @@
 const intervalBuilder = require("../helpers/intervalBuilder.js");
-
-const NEGATIVE_BALANCE_OR_PAUSED = 'NEGATIVE_BALANCE_OR_PAUSED';
-
-const fetchAccountAndUsers = (db, req, res) => {
-    return function(accounts) {
-        if(accounts.length > 0) {
-            if(accounts[0].balance > 0 && !accounts[0].pause) {
-                return Promise.all([
-                    Promise.resolve(accounts[0]),
-                    db().collection('users').find({owner: req.jwt.payload.user_id}, {_id: 0, id: 1, name: 1}).toArray()
-                ]);
-            } else {
-                res.send({ status: true, balance: accounts[0].balance, paused: accounts[0].pause });
-                res.end();
-                throw new Error(NEGATIVE_BALANCE_OR_PAUSED);
-            }
-        } else {
-            throw new Error('no such user');
-        }
-    };
-};
-
-const fetchRecords = (db, intervalStart, intervalEnd) => {
-    return function([account, users]) {
-        return Promise.all([
-            Promise.resolve(account),
-            Promise.resolve(users),
-            db().collection('records').aggregate([
-                { $match: { $and: [
-                    { id: { $in: users.map(user => user.id) } },
-                    { t: { $gte: intervalStart } },
-                    { t: { $lt: intervalEnd } }
-                ] } },
-                { $sort: { t: 1 } },
-                { $project: { _id: 0, t: 1, s: 1, id: 1 } }
-            ]).toArray(),
-            db().collection('records').aggregate([
-                { $match: { $and: [
-                    { id: { $in: users.map(user => user.id) } },
-                    { t: { $lt: intervalStart } }
-                ] } },
-                { $sort: { t: -1 } },
-                { $group: {
-                    _id: '$id',
-                    id: { $first: '$id' },
-                    t: { $first: '$t' },
-                    s: { $first: '$s' }
-                } }
-            ]).toArray()
-        ]);
-    };
-};
-
-const buildIntervalsAndSend = (res, intervalStart, intervalEnd) => {
-    return function([account, users, records, lastRecords]) {
-        records = lastRecords.concat(records);
-
-        res.send({
-            status: true,
-            users: users.map(user => Object.assign(user, {
-                intervals: intervalBuilder(
-                    records.filter(record => record.id == user.id),
-                    intervalStart,
-                    intervalEnd
-                )
-            }))
-        });
-        res.end();
-    };
-};
+const sendAndClose = require('../helpers/sendAndClose.js');
+const {$intervalQueryMulti, $lastRecordsQueryMulti} = require('../helpers/queries.js');
 
 module.exports = function(mongodb, mongourl) {
-    return function(req, res) {
-        let _db;
+    return async function(req, res) {
+        let connection;
 
-        const getDb = () => _db;
+        const end = new Date();
+        const start = new Date(end.getTime() - 3*60000*60);
 
-        const intervalEnd = new Date();
-        const intervalStart = new Date(intervalEnd.getTime() - 60000*60*3);
+        try {
+            connection = await mongodb.connect(mongourl);
 
-        mongodb.connect(mongourl)
-        .then(db => (_db = db).collection('settings').find({id: req.jwt.payload.user_id}).toArray())
-        .then(fetchAccountAndUsers(getDb, req, res))
-        .then(fetchRecords(getDb, intervalStart, intervalEnd))
-        .then(buildIntervalsAndSend(res, intervalStart, intervalEnd))
-        .catch(e => (e.message == NEGATIVE_BALANCE_OR_PAUSED) ? Promise.resolve() : Promise.reject(e))
-        .catch(e => {
+            const colSettings = connection.collection('settings'),
+                  colUsers = connection.collection('users'),
+                  colRecords = connection.collection('records');
+
+            const accounts = await colSettings.find({id: req.jwt.payload.user_id}).toArray();
+
+            if(accounts.length > 0) {
+                const account = accounts[0];
+
+                if(account.balance > 0 && !account.pause) {
+                    const users = await colUsers.find(
+                        { owner: req.jwt.payload.user_id },
+                        { _id: 0, id: 1, name: 1 }
+                    ).toArray();
+
+                    const [records, lastRecords] = await Promise.all([
+                        colRecords.aggregate($intervalQueryMulti(users.map(user=>user.id), start, end)).toArray(),
+                        colRecords.aggregate($lastRecordsQueryMulti(users.map(user=>user.id), start)).toArray(),
+                    ]);
+
+                    const totalRecords = lastRecords.concat(records);
+
+                    sendAndClose(res, connection, {
+                        status: true,
+                        users: users.map(user => Object.assign(user, {
+                            intervals: intervalBuilder(
+                                totalRecords.filter(record => record.id == user.id),
+                                start,
+                                end
+                            )
+                        }))
+                    });
+                } else {
+                    sendAndClose(res, connection, {
+                        status: true,
+                        balance: account.balance,
+                        paused: account.pause
+                    });
+                }
+            } else {
+                throw new Error('no such user');
+            }
+        } catch(e) {
             console.error("[ERROR /api/users.get]", e.message);
 
-            if(!res.finished) {
-                res.send({
-                    status: false,
-                    error: e.message
-                });
-                res.end();
-            }
-        })
-        .then(() => {
-            _db.close();
-        });
+            sendAndClose(res, connection, {
+                status: false,
+                error: e.message
+            });
+        }
     };
 };
