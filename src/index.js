@@ -1,4 +1,4 @@
-const { vk_secret, listen_address, listen_port, users_per_batch } = require("./secrets.js");
+const { vk_secret, listen_address, listen_port, users_per_batch, batch_delay } = require("./secrets.js");
 
 const VK = {
     admin_id: 21768456,
@@ -42,6 +42,12 @@ app.use(function(req, res, next) {
 });
 
 app.post(
+    '/api/prefetch',
+    logger,
+    require('./handlers/api.prefetch.js')(mongodb, mongourl, VK)
+);
+
+app.post(
     '/api/stats.get',
     logger,
     rejectUnauthorized,
@@ -79,7 +85,7 @@ app.post(
     '/api/user.get',
     logger,
     rejectUnauthorized,
-    require('./handlers/api.user.get.intervals.js')(mongodb, mongourl, 7, 24*3600*1000, 6*24*3600*1000)
+    require('./handlers/api.user.get.intervals.js')(mongodb, mongourl, 14, 24*3600*1000, 13*24*3600*1000)
 );
 
 app.post(
@@ -179,7 +185,7 @@ async function updateRecords() {
                     }
 
                     resolve();
-                }, i*500);
+                }, i*batch_delay);
             }))
         );
 

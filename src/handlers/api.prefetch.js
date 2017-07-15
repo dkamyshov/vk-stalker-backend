@@ -1,0 +1,66 @@
+const jwt = require('../helpers/jwt.js');
+const jprequest = require('../helpers/jprequest.js');
+const buildURI = require("../helpers/uri.js");
+const { jwt_secret } = require("../secrets.js");
+const sendAndClose = require('../helpers/sendAndClose.js');
+
+module.exports = function(mongodb, mongourl, VK) {
+    return async function(req, res) {
+        let connection;
+
+        try {
+            const authResponse = await jprequest(buildURI(
+                VK.access_token_uri,
+                {
+                    client_id: VK.app_id,
+                    client_secret: VK.secret_key,
+                    redirect_uri: VK.redirect_uri,
+                    code: req.body.code,
+                    v: VK.api_version
+                }
+            ));
+
+            if(authResponse.hasOwnProperty('access_token')) {
+                const owner_id = authResponse['user_id'];
+
+                const friendsResponse = await jprequest(buildURI(
+                    VK.friends_get_uri,
+                    {
+                        access_token: authResponse['access_token'],
+                        order: 'hints',
+                        fields: ['first_name', 'last_name'].join(','),
+                        v: VK.api_version
+                    }
+                ));
+
+                connection = await mongodb.connect(mongourl);
+
+                const colUsers = connection.collection('users');
+
+                const registeredUsers = (await colUsers.aggregate([
+                    { $match: { owner: owner_id } },
+                    { $project: { _id: 0, id: 1 } }
+                ]).toArray()).map(user => user.id);
+
+                sendAndClose(res, null, {
+                    status: true,
+                    user_id: owner_id,
+                    users: friendsResponse.response.items.map(user => ({
+                        name: user.first_name+' '+user.last_name,
+                        id: user.id,
+                        selected: registeredUsers.indexOf(user.id) !== -1
+                    }))
+                });
+            } else {
+                throw new Error('Unable to authorize.');
+            }
+        } catch(e) {
+            console.log("[ERROR /api/prefetch]", e.message);
+
+            sendAndClose(res, connection, {
+                status: false,
+                error: e.message
+            });
+        }
+    };
+};
