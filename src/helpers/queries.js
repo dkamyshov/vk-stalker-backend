@@ -81,6 +81,38 @@ const $userStats = () => [
     { $project: { _id: 0, id: '$_id', users: 1, settings: { balance: 1, pause: 1 } } }
 ];
 
+const $topRecordsQuery = () => [
+    { $group: {
+        _id: '$id',
+        count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $limit: 10 },
+    { $lookup: {
+        from: 'users',
+        localField: '_id',
+        foreignField: 'id',
+        as: 'users' } },
+    { $unwind: '$users' },
+    { $group: {
+        _id: '$_id',
+        count: { $first: '$count' },
+        name: { $first: '$users.name' } } },
+    { $lookup: {
+       from: 'records',
+       localField: '_id',
+       foreignField: 'id',
+       as: 'records'
+    } },
+    { $unwind: '$records' },
+    { $group: {
+       _id: '$_id',
+        count: { $first: '$count' },
+        name: { $first: '$name' },
+        platforms: { $push: '$records.s' }
+    } },
+    { $sort: { count: -1 } }
+];
+
 module.exports = {
     $intervalQuery,
     $intervalQueryMulti,
@@ -88,5 +120,6 @@ module.exports = {
     $lastRecordsQueryMulti,
     $findUsersQuery,
     $fetchLastRecordsQuery,
-    $userStats
+    $userStats,
+    $topRecordsQuery
 };

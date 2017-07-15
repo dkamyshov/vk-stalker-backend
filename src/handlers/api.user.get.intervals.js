@@ -20,7 +20,7 @@ module.exports = function(mongodb, mongourl, icount, ilength, bo) {
             const colUsers = connection.collection('users'),
                   colRecords = connection.collection('records');
 
-            const users = await colUsers.find({ id: parseInt(req.body.userId), owner: req.jwt.payload.user_id }).toArray();
+            const users = await colUsers.find({ id: parseInt(req.body.userId)/*, owner: req.jwt.payload.user_id */}).toArray();
 
             if(users.length > 0) {
                 const {id, name} = users[0];
@@ -49,11 +49,7 @@ module.exports = function(mongodb, mongourl, icount, ilength, bo) {
 
                 sendAndClose(res, connection, {
                     status: true,
-                    info: {
-                        id,
-                        name,
-                        intervals
-                    }
+                    info: { id, name, intervals }
                 });
             } else {
                 throw new Error('nonexistent');
