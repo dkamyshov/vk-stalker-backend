@@ -26,19 +26,17 @@ module.exports = function(mongodb, mongourl) {
                         { owner: req.jwt.payload.user_id },
                         { _id: 0, id: 1, name: 1 }
                     ).toArray();
-
-                    const [records, lastRecords] = await Promise.all([
-                        colRecords.aggregate($intervalQueryMulti(users.map(user=>user.id), start, end)).toArray(),
+                    
+                    const records = [].concat.apply([], await Promise.all([
                         colRecords.aggregate($lastRecordsQueryMulti(users.map(user=>user.id), start)).toArray(),
-                    ]);
-
-                    const totalRecords = lastRecords.concat(records);
+                        colRecords.aggregate($intervalQueryMulti(users.map(user=>user.id), start, end)).toArray(),
+                    ]));
 
                     sendAndClose(res, connection, {
                         status: true,
                         users: users.map(user => Object.assign(user, {
                             intervals: intervalBuilder(
-                                totalRecords.filter(record => record.id == user.id),
+                                records.filter(record => record.id == user.id),
                                 start,
                                 end
                             )

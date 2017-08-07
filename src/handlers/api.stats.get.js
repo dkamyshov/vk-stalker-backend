@@ -1,4 +1,4 @@
-const {$userStats} = require('../helpers/queries.js');
+const {$userStats, $topRecordsQuery} = require('../helpers/queries.js');
 const sendAndClose = require('../helpers/sendAndClose.js');
 
 const hide = str => '*'.repeat(3) + String(str).substring(3);
@@ -10,10 +10,12 @@ module.exports = function(mongodb, mongourl) {
         try {
             connection = await mongodb.connect(mongourl);
 
-            const [recordsCount, users, accounts, log] = await Promise.all([
+            const [recordsCount, users, accounts, topRecords, topPlatforms, log] = await Promise.all([
                 connection.collection('records').count(),
                 connection.collection('users').distinct('id'),
                 connection.collection('users').aggregate($userStats()).toArray(),
+                connection.collection('records').aggregate($topRecordsQuery()).toArray(),
+                connection.collection('records').aggregate([{$group:{_id: '$s', count: {$sum: 1}}}]).toArray(),
                 connection.collection('access').find({}).sort({ time: -1 }).limit(500).toArray()
             ]);
 
@@ -22,6 +24,8 @@ module.exports = function(mongodb, mongourl) {
                 log,
                 status: true,
                 usersCount: users.length,
+                topRecords,
+                topPlatforms,
                 accounts: accounts.map(account => Object.assign(account, {
                     id: hide(account.id)
                 }))
