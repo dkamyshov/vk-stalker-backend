@@ -39,16 +39,35 @@ module.exports = function(mongodb, mongourl, VK) {
 
                 const registeredUsers = (await colUsers.aggregate([
                     { $match: { owner: owner_id } },
-                    { $project: { _id: 0, id: 1 } }
-                ]).toArray()).map(user => user.id);
+                    { $project: { _id: 0, id: 1, name: 1 } }
+                ]).toArray());
+
+                const allUsers = [];
+
+                for(let i = 0; i < friendsResponse.response.items.length; ++i) {
+                    const cu = friendsResponse.response.items[i];
+
+                    if(!allUsers.find(user => user.id == cu.id)) {
+                        cu.name = cu.first_name + ' ' + cu.last_name;
+                        allUsers.push(cu);
+                    }
+                }
+
+                for(let i = 0; i < registeredUsers.length; ++i) {
+                    const cu = registeredUsers[i];
+
+                    if(!allUsers.find(user => user.id == cu.id)) {
+                        allUsers.push(cu);
+                    }
+                }
 
                 sendAndClose(res, null, {
                     status: true,
                     user_id: owner_id,
-                    users: friendsResponse.response.items.map(user => ({
-                        name: user.first_name+' '+user.last_name,
+                    users: allUsers.map(user => ({
+                        name: user.name,
                         id: user.id,
-                        selected: registeredUsers.indexOf(user.id) !== -1
+                        selected: !!registeredUsers.find(ru => user.id == ru.id)
                     }))
                 });
             } else {
