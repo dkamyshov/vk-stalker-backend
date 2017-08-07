@@ -1,4 +1,4 @@
-const { vk_secret, listen_address, listen_port, users_per_batch, batch_delay } = require("./secrets.js");
+const { vk_secret, listen_address, listen_port, users_per_batch, batch_delay, gmongouri } = require("./secrets.js");
 
 const VK = {
     admin_id: 21768456,
@@ -6,7 +6,7 @@ const VK = {
     secret_key: vk_secret,
     api_version: '5.56',
 
-    redirect_uri: `http://${listen_address}:${listen_port}/verify`,
+    redirect_uri: `http://vkstalker-1.appspot.com/verify`,
     
     auth_uri: 'https://oauth.vk.com/authorize',
     access_token_uri: 'https://oauth.vk.com/access_token',
@@ -26,7 +26,7 @@ const {$findUsersQuery, $fetchLastRecordsQuery} = require('./helpers/queries.js'
 const rejectUnauthorized = require('./middleware/unauthorized.js');
 
 const mongodb = require('mongodb').MongoClient;
-const mongourl = "mongodb://localhost:27017/vkwatcher";
+const mongourl = process.env.PORT ? gmongouri : "mongodb://localhost:27017/vkwatcher";
 
 const logger = require('./middleware/logger.js')(mongodb, mongourl);
 
@@ -85,14 +85,21 @@ app.post(
     '/api/user.get',
     logger,
     rejectUnauthorized,
-    require('./handlers/api.user.get.intervals.js')(mongodb, mongourl, 14, 24*3600*1000, 13*24*3600*1000)
+    require('./handlers/api.user.get.intervals.js')(mongodb, mongourl, true)
+);
+
+app.post(
+    '/api/user.add',
+    logger,
+    rejectUnauthorized,
+    require('./handlers/api.user.add.js')(mongodb, mongourl, VK)
 );
 
 app.post(
     '/api/user.hourly.get',
     logger,
     rejectUnauthorized,
-    require('./handlers/api.user.get.intervals.js')(mongodb, mongourl, 24, 3600*1000, 0)
+    require('./handlers/api.user.get.intervals.js')(mongodb, mongourl, false)
 )
 
 app.post(
@@ -201,7 +208,9 @@ async function updateRecords() {
     }
 }
 
-setInterval(updateRecords, 60000);
+setInterval(updateRecords, process.env.PORT ? 60000 : 20*60000);
 updateRecords();
 
-app.listen(listen_port, listen_address);
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT);
