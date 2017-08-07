@@ -22,7 +22,7 @@ module.exports = function(mongodb, mongourl, VK) {
 
             await colUsers.remove({ owner: owner_id });
             const [accounts] = await Promise.all([
-                colSettings.find({ id: owner_id }),
+                colSettings.find({ id: owner_id }).toArray(),
                 colUsers.insertMany(
                     users.map(user => ({
                         id: user.id,

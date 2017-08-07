@@ -8,7 +8,7 @@ const jprequest = (url) => new Promise(function(resolve, reject) {
             if(rr.statusCode == 200) {
                 resolve(JSON.parse(body));
             } else {
-                throw new Error("Status code "+rr.statusCode);
+                throw new Error(`Status code ${rr.statusCode} @ ${url}`);
             }
         } catch(e) {
             reject(e);
