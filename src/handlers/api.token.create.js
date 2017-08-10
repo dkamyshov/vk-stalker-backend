@@ -9,7 +9,7 @@ module.exports = function(mongodb, mongourl, VK) {
         let connection;
 
         try {
-            const {users, owner_id} = req.body; // TODO: DO NOT TRUST USER ON THIS!!!
+            const {users, owner_id} = req.body;
 
             if(users.length < 1) {
                 throw new Error('no users selected');
